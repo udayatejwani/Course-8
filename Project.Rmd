@@ -1,0 +1,169 @@
+---
+title: "Practical Machine Learning Week 4 Project"
+author: "Udaya K Tejwani"
+date: "December 7, 2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+## Loading Data
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(RGtk2)
+library(rattle)
+library(randomForest)
+library(gbm)
+
+training_data <- read.csv(url("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"))
+testing_data <- read.csv(url("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"))
+
+dim(training_data)
+dim(testing_data)
+
+```
+
+## Data Cleanup
+
+#### Removing variables, 95% of which have NA values
+
+```{r}
+na_val_col <- sapply(training_data, function(x) mean(is.na(x))) > 0.95
+
+training_data <- training_data[,na_val_col == FALSE]
+testing_data <- testing_data[,na_val_col == FALSE]
+
+dim(training_data)
+dim(testing_data)
+
+```
+
+#### Recoding missing values
+
+````{r}
+######colSums(is.na(training_data))
+######colSums(is.na(testing_data))
+testing_data[is.na(testing_data)] <- mean(testing_data, na.rm = TRUE)
+
+```
+
+#### Remvoing variables that have nearly zero variance
+
+```{r}
+
+non_zero_var <- nearZeroVar(training_data)
+
+
+training_data <- training_data[,-non_zero_var]
+testing_data <- testing_data[,-non_zero_var]
+
+dim(training_data)
+dim(testing_data)
+
+######head(testing_data)
+```
+
+#### Removing first 6 variables since these will not contribute to the model
+
+```{r}
+
+training_data <- training_data[,7:59]
+testing_data <- testing_data[,7:59]
+
+dim(training_data)
+dim(testing_data)
+
+```
+
+## Data partitioning
+
+The training dataset, training_data, is being partitioned into training and testing data in the ratio of 80%:20%
+```{r}
+
+inTrain <- createDataPartition(training_data$classe, p=0.8, list=FALSE)
+training <- training_data[inTrain,]
+testing <- training_data[-inTrain,]
+
+dim(training)
+dim(testing)
+```
+## Decision Tree Model
+
+```{r}
+set.seed(12345)
+mod_DT <- train(classe ~ ., data = training, method="rpart")
+pred_DT <- predict(mod_DT, testing)
+cmDT <- confusionMatrix(pred_DT, as.factor(testing$classe))
+cmDT
+rpart.plot(mod_DT$finalModel, roundint=FALSE)
+
+```
+The decision tree model has a very low accuracy of 51%.  The model accuracy is not satisfactory. This model needs to be verified with cross validation from other models.
+
+## Random Forest Model
+
+```{r}
+
+set.seed(23456)
+mod_RF <- train(classe ~. , data=training, method= "rf", ntree=100)
+pred_RF <- predict(mod_RF, testing)
+cmRFM <- confusionMatrix(pred_RF, testing$classe)
+cmRFM
+
+```
+
+The random forest model has accuracy of 99%.  Although this is an impressive model accuracy, it could also imply over-fitting.  Next, we will cross validate the above models with Gradient Boosting model.
+
+## Gradient Boosting Model
+
+```{r}
+set.seed(34567)
+mod_gbm <- train(classe~., data=training, method="gbm", verbose= FALSE)
+mod_gbm$finalmodel
+pred_gbm <- predict(mod_gbm, testing)
+cmGBM <- confusionMatrix(pred_gbm, testing$classe)
+cmGBM
+
+```
+The gradient boosting model has accuracy of 96%.
+
+```{r}
+cmDT$overall
+cmRFM$overall
+cmGBM$overall
+  
+```
+## Model of Choice
+
+The Random Forest Model is the model of choice since it has the highest accuracy.  Grdient Boosting Model is also good but it is a close second model.  
+
+## Test Prediction
+
+```{r}
+Test_RF_prediction <- predict(mod_RF, testing_data )
+Test_RF_prediction
+
+```
